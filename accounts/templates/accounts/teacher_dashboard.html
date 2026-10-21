@@ -1,0 +1,7 @@
+<h1>Teacher dashboard</h1>
+
+<form method="post" action="{% url 'accounts:logout' %}">
+  {% csrf_token %}<button>Log out</button>
+</form>
+
+<p>Signed in as {{ request.user.username }} ({{ request.user.role }})</p>
