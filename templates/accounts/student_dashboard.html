@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Available Exams{% endblock %}
+{% block content %}
+<h2 class="mb-3">Available Exams</h2>
+
+<div class="row g-3">
+{% for e in exams %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">{{ e.title }}</h5>
+        <h6 class="card-subtitle mb-2 text-muted">{{ e.subject }} · {{ e.duration_minutes }} min</h6>
+
+        {% if e.attempt and e.attempt.status == 'submitted' %}
+          <span class="badge bg-success">Submitted</span>
+          <p class="mt-2 mb-0">Score: {{ e.attempt.score }} / {{ e.attempt.total_marks }}</p>
+        {% elif e.attempt %}
+          <span class="badge bg-info text-dark">In progress</span>
+        {% elif e.not_started %}
+          <span class="badge bg-secondary">Opens {{ e.start_time|date:"M d, H:i" }}</span>
+        {% elif e.is_over %}
+          <span class="badge bg-dark">Closed</span>
+        {% else %}
+          <span class="badge bg-primary">Open</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% empty %}
+  <p class="text-muted">No exams have been assigned to you yet.</p>
+{% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}My Exams{% endblock %}
+{% block content %}
+<h2 class="mb-3">My Exams</h2>
+
+<p>
+  {% for s in subjects %}
+    <span class="badge bg-secondary me-1">{{ s.name }}</span>
+  {% empty %}
+    <span class="text-muted">No subjects assigned yet.</span>
+  {% endfor %}
+</p>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr><th>Title</th><th>Subject</th><th>Status</th><th>Questions</th><th>Attempts</th></tr>
+    </thead>
+    <tbody>
+    {% for e in exams %}
+      <tr>
+        <td>{{ e.title }}</td>
+        <td>{{ e.subject }}</td>
+        <td>
+          <span class="badge bg-{% if e.status == 'published' %}success{% elif e.status == 'closed' %}dark{% else %}warning text-dark{% endif %}">
+            {{ e.get_status_display }}
+          </span>
+        </td>
+        <td>{{ e.num_questions }}</td>
+        <td>{{ e.num_attempts }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="text-muted">You have not created any exams yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
