@@ -1,7 +1,13 @@
 {% extends 'base.html' %}
 {% block title %}My Exams{% endblock %}
 {% block content %}
-<h2 class="mb-3">My Exams</h2>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">My Exams</h2>
+  <div class="d-flex gap-2">
+    <a class="btn btn-primary" href="{% url 'exams:exam_create' %}">+ Create exam</a>
+    <a class="btn btn-outline-secondary" href="{% url 'exams:exam_list' %}">All my exams</a>
+  </div>
+</div>
 
 <p>
   {% for s in subjects %}
@@ -19,7 +25,7 @@
     <tbody>
     {% for e in exams %}
       <tr>
-        <td>{{ e.title }}</td>
+        <td><a href="{% url 'exams:exam_detail' e.pk %}">{{ e.title }}</a></td>
         <td>{{ e.subject }}</td>
         <td>
           <span class="badge bg-{% if e.status == 'published' %}success{% elif e.status == 'closed' %}dark{% else %}warning text-dark{% endif %}">
