@@ -6,16 +6,25 @@ import {
   Settings, 
   ChevronDown 
 } from 'lucide-react';
+import { useProfile } from '../context/ProfileContext';
 
 export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
+  const { name, avatar } = useProfile();
+  
+  // Get initials for fallback if avatar fails or isn't set
+  const initials = name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
 
   return (
     <div className="flex flex-col h-screen bg-[#F0F5FA] overflow-hidden">
       {/* Top Header Bar with APEX Logo */}
       <header className="h-16 bg-[#F0F5FA] flex items-center px-6 border-b border-gray-200/50 flex-shrink-0">
         <div className="flex items-center gap-2">
-          {/* APEX Triangle Icon */}
           <div className="flex items-center">
             <span className="text-amber-500 font-extrabold text-2xl tracking-tighter">▲</span>
             <span className="text-[#0A2540] font-black text-2xl tracking-wider ml-1">PEX</span>
@@ -26,19 +35,16 @@ export const AdminLayout: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Body Layout (Sidebar + Content) */}
+      {/* Main Body Layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="w-60 bg-[#0B2545] text-white flex flex-col justify-between flex-shrink-0 relative overflow-hidden">
-          {/* Top Nav Items */}
           <nav className="p-3 space-y-2 mt-2">
             <NavLink
               to="/admin/dashboard"
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
-                  isActive 
-                    ? 'bg-[#1E68F6] text-white shadow-lg shadow-blue-500/30' 
-                    : 'text-blue-200 hover:bg-white/10 hover:text-white'
+                  isActive ? 'bg-[#1E68F6] text-white shadow-lg shadow-blue-500/30' : 'text-blue-200 hover:bg-white/10 hover:text-white'
                 }`
               }
             >
@@ -50,9 +56,7 @@ export const AdminLayout: React.FC = () => {
               to="/admin/users"
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
-                  isActive 
-                    ? 'bg-[#1E68F6] text-white shadow-lg shadow-blue-500/30' 
-                    : 'text-blue-200 hover:bg-white/10 hover:text-white'
+                  isActive ? 'bg-[#1E68F6] text-white shadow-lg shadow-blue-500/30' : 'text-blue-200 hover:bg-white/10 hover:text-white'
                 }`
               }
             >
@@ -64,9 +68,7 @@ export const AdminLayout: React.FC = () => {
               to="/admin/settings"
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
-                  isActive 
-                    ? 'bg-[#1E68F6] text-white shadow-lg shadow-blue-500/30' 
-                    : 'text-blue-200 hover:bg-white/10 hover:text-white'
+                  isActive ? 'bg-[#1E68F6] text-white shadow-lg shadow-blue-500/30' : 'text-blue-200 hover:bg-white/10 hover:text-white'
                 }`
               }
             >
@@ -75,27 +77,30 @@ export const AdminLayout: React.FC = () => {
             </NavLink>
           </nav>
 
-          {/* Decorative Background Mountain Shapes at bottom of sidebar */}
           <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-blue-900/40 to-transparent pointer-events-none" />
 
           {/* User Profile Footer in Sidebar */}
           <div className="p-3 border-t border-blue-900/40 z-10">
             <div 
-              onClick={() => navigate('/admin/profile')}
+              onClick={() => navigate('/admin/settings')}
               className="flex items-center justify-between p-2 rounded-xl cursor-pointer hover:bg-white/10 transition-colors group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center border border-white/20 overflow-hidden">
-                  <span className="text-xs font-bold text-gray-700">SJ</span>
+                <div className="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center border border-white/20 overflow-hidden flex-shrink-0">
+                  {avatar ? (
+                    <img src={avatar} alt={name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xs font-bold text-gray-700">{initials}</span>
+                  )}
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-white group-hover:text-blue-300 transition-colors">
-                    Ms. Sarah Johnson
+                <div className="overflow-hidden">
+                  <p className="text-xs font-semibold text-white group-hover:text-blue-300 transition-colors truncate">
+                    {name}
                   </p>
                   <p className="text-[10px] text-blue-300">Super Admin</p>
                 </div>
               </div>
-              <ChevronDown className="w-4 h-4 text-blue-300 group-hover:translate-y-0.5 transition-transform" />
+              <ChevronDown className="w-4 h-4 text-blue-300 group-hover:translate-y-0.5 transition-transform flex-shrink-0" />
             </div>
           </div>
         </aside>

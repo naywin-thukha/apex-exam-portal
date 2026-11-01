@@ -1,48 +1,50 @@
 import React, { useState } from 'react';
 import { User, Upload, Check } from 'lucide-react';
+import { useProfile } from '../../context/ProfileContext';
 
 export const Profile: React.FC = () => {
+  const profileContext = useProfile();
+
   const [formData, setFormData] = useState({
-    fullName: 'Ms. Sarah Johnson',
-    email: 'sarah.johnson@apex.edu.mm',
-    phoneNumber: '+95 9 123 456 789',
-    bio: 'Super Admin at APEX Education Center. Passionate about education and student success.',
+    name: profileContext.name,
+    email: profileContext.email,
+    phone: profileContext.phone,
+    bio: profileContext.bio,
   });
 
-  const [profileImage, setProfileImage] = useState<string>(
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'
-  );
+  const [profileImage, setProfileImage] = useState<string>(profileContext.avatar);
   const [successMessage, setSuccessMessage] = useState<string>('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Handle image selection and instant preview
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const imageUrl = URL.createObjectURL(file);
       setProfileImage(imageUrl);
-      console.log('Selected file for upload:', file);
     }
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Connect this payload and FormData to your Java Spring Boot backend API endpoint
-    console.log('Saving profile data:', { ...formData, profileImage });
+    profileContext.updateProfile({
+      ...formData,
+      avatar: profileImage,
+    });
     setSuccessMessage('Profile updated successfully!');
     setTimeout(() => setSuccessMessage(''), 3000);
   };
 
   const handleDiscard = () => {
     setFormData({
-      fullName: 'Ms. Sarah Johnson',
-      email: 'sarah.johnson@apex.edu.mm',
-      phoneNumber: '+95 9 123 456 789',
-      bio: 'Super Admin at APEX Education Center. Passionate about education and student success.',
+      name: profileContext.name,
+      email: profileContext.email,
+      phone: profileContext.phone,
+      bio: profileContext.bio,
     });
+    setProfileImage(profileContext.avatar);
   };
 
   return (
@@ -67,7 +69,7 @@ export const Profile: React.FC = () => {
           />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">{formData.fullName}</h2>
+          <h2 className="text-xl font-bold text-gray-900">{formData.name}</h2>
           <p className="text-sm text-gray-400 font-medium">Super Admin</p>
         </div>
       </div>
@@ -84,10 +86,11 @@ export const Profile: React.FC = () => {
               <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
               <input
                 type="text"
-                name="fullName"
-                value={formData.fullName}
+                name="name"
+                value={formData.name}
                 onChange={handleChange}
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all bg-white"
+                required
               />
             </div>
 
@@ -99,6 +102,7 @@ export const Profile: React.FC = () => {
                 value={formData.email}
                 onChange={handleChange}
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all bg-white"
+                required
               />
             </div>
 
@@ -106,8 +110,8 @@ export const Profile: React.FC = () => {
               <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
               <input
                 type="text"
-                name="phoneNumber"
-                value={formData.phoneNumber}
+                name="phone"
+                value={formData.phone}
                 onChange={handleChange}
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all bg-white"
               />
@@ -127,8 +131,6 @@ export const Profile: React.FC = () => {
 
           <div className="pt-4 border-t border-gray-100">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Profile Photo</label>
-            
-            {/* Functional Upload Box with Hidden File Input */}
             <label className="border-2 border-dashed border-blue-200 rounded-2xl p-6 text-center bg-blue-50/20 hover:bg-blue-50/40 cursor-pointer transition-colors block">
               <input 
                 type="file" 
@@ -149,7 +151,6 @@ export const Profile: React.FC = () => {
           </div>
         </div>
 
-        {/* Form Actions */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-end gap-4">
           <button
             type="button"
