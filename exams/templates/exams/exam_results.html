@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Results{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">Results: {{ exam.title }}</h1>
+<p class="text-muted">{{ exam.subject }} · {{ exam.total_marks }} marks</p>
+
+{% if stats %}
+  <p>
+    <strong>{{ stats.count }}</strong> submitted ·
+    average <strong>{{ stats.average }}%</strong> ·
+    highest <strong>{{ stats.highest }}%</strong>
+  </p>
+{% endif %}
+
+<table class="table table-striped align-middle">
+  <thead><tr><th>Student</th><th>Status</th><th>Score</th><th>%</th><th>Submitted</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td>{{ row.student.username }}</td>
+      {% if not row.attempt %}
+        <td><span class="badge text-bg-secondary">Not started</span></td><td>-</td><td>-</td><td>-</td>
+      {% elif row.attempt.status == 'submitted' %}
+        <td><span class="badge text-bg-success">Submitted</span></td>
+        <td>{{ row.attempt.score }} / {{ row.attempt.total_marks }}</td>
+        <td>{{ row.attempt.percentage }}</td>
+        <td>{{ row.attempt.submitted_at|date:"M d, H:i" }}</td>
+      {% else %}
+        <td><span class="badge text-bg-info">In progress</span></td><td>-</td><td>-</td><td>-</td>
+      {% endif %}
+    </tr>
+  {% empty %}
+    <tr><td colspan="5" class="text-center text-muted">No students assigned.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<a href="{% url 'exams:exam_detail' exam.pk %}">← Back to the exam</a>
+{% endblock %}

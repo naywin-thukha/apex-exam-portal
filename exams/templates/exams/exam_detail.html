@@ -12,6 +12,7 @@
     </div>
   </div>
     <div class="d-flex gap-2">
+          <a class="btn btn-outline-primary" href="{% url 'exams:exam_students' exam.pk %}">Students ({{ exam.assignments.count }})</a>
     {% if is_draft %}
       <a class="btn btn-outline-secondary" href="{% url 'exams:exam_update' exam.pk %}">Edit</a>
       <form method="post" action="{% url 'exams:exam_publish' exam.pk %}">

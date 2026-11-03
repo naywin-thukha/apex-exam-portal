@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ exam.title }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">{{ exam.title }}</h1>
+  <div class="fs-5">Time left: <strong id="timer" data-remaining="{{ remaining }}">--:--</strong></div>
+</div>
+
+{% if exam.instructions %}<p class="text-muted">{{ exam.instructions }}</p>{% endif %}
+
+<div id="timeup" class="alert alert-warning d-none">Time is up. You can no longer save answers.</div>
+
+<form method="post" id="examform">
+  {% csrf_token %}
+  {% for q in questions %}
+    <div class="card mb-3"><div class="card-body">
+      <strong>Q{{ forloop.counter }}. {{ q.text }}</strong>
+      <span class="text-muted">({{ q.marks }} mark{{ q.marks|pluralize }})</span>
+      <div class="mt-2">
+        {% for c in q.choices.all %}
+          <div class="form-check">
+            <input class="form-check-input" type="radio"
+                   name="q_{{ q.id }}" id="c{{ c.id }}" value="{{ c.id }}"
+                   {% if q.saved_choice_id == c.id %}checked{% endif %}>
+            <label class="form-check-label" for="c{{ c.id }}">{{ c.text }}</label>
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+  {% endfor %}
+    <button class="btn btn-outline-primary" name="action" value="save" id="savebtn">Save answers</button>
+  <button class="btn btn-success" name="action" value="submit"
+          onclick="return confirm('Submit the exam? You cannot change answers afterwards.')">Submit exam</button>
+</form>
+
+<script>
+  // The browser countdown is only a display. The server enforces the real deadline.
+  (function () {
+    var el = document.getElementById("timer");
+    var left = parseInt(el.dataset.remaining, 10);
+    function show() {
+      var m = Math.floor(left / 60), s = left % 60;
+      el.textContent = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+    }
+    function timeUp() {
+      document.getElementById("timeup").classList.remove("d-none");
+      document.getElementById("savebtn").disabled = true;
+      document.querySelectorAll("#examform input").forEach(function (i) { i.disabled = true; });
+    }
+    show();
+    if (left <= 0) { timeUp(); return; }
+    var t = setInterval(function () {
+      left -= 1; show();
+      if (left <= 0) { clearInterval(t); timeUp(); }
+    }, 1000);
+  })();
+</script>
+{% endblock %}

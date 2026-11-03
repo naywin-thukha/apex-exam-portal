@@ -1,7 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import BaseInlineFormSet, inlineformset_factory
-
+from accounts.models import User
 from .models import Choice, Exam, Question
 
 DT_FORMAT = "%Y-%m-%dT%H:%M"
@@ -99,3 +99,20 @@ def make_choice_formset(extra):
         fields=("text", "is_correct"),
         extra=extra, can_delete=True,
     )
+
+class AssignStudentsForm(forms.Form):
+    """Job: pick which students may take an exam."""
+
+    students = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+    )
+
+    def __init__(self, *args, exam, **kwargs):
+        super().__init__(*args, **kwargs)
+        field = self.fields["students"]
+        field.queryset = User.objects.filter(
+            role=User.Role.STUDENT, is_active=True
+        ).order_by("username")
+        field.initial = list(exam.students.values_list("pk", flat=True))

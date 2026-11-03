@@ -14,5 +14,12 @@ urlpatterns = [
     path("teacher/exams/<int:exam_pk>/questions/<int:pk>/edit/", views.QuestionFormView.as_view(), name="question_edit"),
     path("teacher/exams/<int:exam_pk>/questions/<int:pk>/delete/", views.QuestionDeleteView.as_view(), name="question_delete"),
     path("teacher/exams/<int:pk>/publish/", views.ExamStatusView.as_view(action="publish"), name="exam_publish"),
+    path("teacher/exams/<int:pk>/students/", views.AssignStudentsView.as_view(), name="exam_students"),
     path("teacher/exams/<int:pk>/unpublish/", views.ExamStatusView.as_view(action="unpublish"), name="exam_unpublish"),
+    path("teacher/exams/<int:pk>/results/", views.ExamResultsView.as_view(), name="exam_results"),
+    path("exams/<int:pk>/result/", views.ResultView.as_view(), name="exam_result"),
+        # Student
+    path("exams/<int:pk>/start/", views.StartExamView.as_view(), name="exam_start"),
+    path("exams/<int:pk>/take/", views.ExamTakeView.as_view(), name="exam_take"),
+    
 ]

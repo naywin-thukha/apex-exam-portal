@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Result{% endblock %}
+{% block content %}
+<h1 class="h4">{{ exam.title }}: result</h1>
+<div class="card mb-4"><div class="card-body">
+  <div class="display-6">{{ attempt.score }} / {{ attempt.total_marks }}</div>
+  <div class="text-muted">{{ attempt.percentage }}% · submitted {{ attempt.submitted_at }}</div>
+</div></div>
+
+{% if review %}
+  <h2 class="h5">Review</h2>
+  {% for item in review %}
+    <div class="card mb-2"><div class="card-body">
+      <strong>Q{{ forloop.counter }}. {{ item.question.text }}</strong>
+      {% if item.is_right %}
+        <span class="badge text-bg-success">Correct</span>
+      {% else %}
+        <span class="badge text-bg-danger">Wrong</span>
+      {% endif %}
+      <div class="mt-2">
+        Your answer: {% if item.chosen %}{{ item.chosen.text }}{% else %}<em>not answered</em>{% endif %}
+        {% if not item.is_right %}<br>Correct answer: <span class="text-success">{{ item.correct.text }}</span>{% endif %}
+      </div>
+    </div></div>
+  {% endfor %}
+{% endif %}
+
+<a href="{% url 'accounts:student_dashboard' %}">← Back to my exams</a>
+{% endblock %}
