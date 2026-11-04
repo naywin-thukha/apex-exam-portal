@@ -28,9 +28,9 @@
       </div>
     </div></div>
   {% endfor %}
-    <button class="btn btn-outline-primary" name="action" value="save" id="savebtn">Save answers</button>
-  <button class="btn btn-success" name="action" value="submit"
+    <button class="btn btn-success" name="action" value="submit"
           onclick="return confirm('Submit the exam? You cannot change answers afterwards.')">Submit exam</button>
+  <span id="savestatus" class="ms-3 text-muted"></span>
 </form>
 
 <script>
@@ -43,9 +43,12 @@
       el.textContent = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
     }
     function timeUp() {
-      document.getElementById("timeup").classList.remove("d-none");
-      document.getElementById("savebtn").disabled = true;
-      document.querySelectorAll("#examform input").forEach(function (i) { i.disabled = true; });
+      // submit what is on the page; the server decides if it is still in time
+      var f = document.getElementById("examform");
+      var h = document.createElement("input");
+      h.type = "hidden"; h.name = "action"; h.value = "submit";
+      f.appendChild(h);
+      f.submit();
     }
     show();
     if (left <= 0) { timeUp(); return; }
@@ -53,6 +56,53 @@
       left -= 1; show();
       if (left <= 0) { clearInterval(t); timeUp(); }
     }, 1000);
+  })();
+</script>
+
+<script>
+  // Autosave: send each answer to the server the moment it is clicked.
+  (function () {
+    var url = "{% url 'exams:exam_autosave' exam.pk %}";
+    var token = document.querySelector("[name=csrfmiddlewaretoken]").value;
+    var status = document.getElementById("savestatus");
+    var queue = Promise.resolve();   // answers are sent one after another, in click order
+
+    function send(questionId, choiceId, retry) {
+      var body = new URLSearchParams({ question: questionId, choice: choiceId });
+      return fetch(url, {
+        method: "POST",
+        headers: { "X-CSRFToken": token },
+        body: body,
+      }).then(function (r) {
+        if (r.ok) {
+          status.className = "ms-3 text-success";
+          status.textContent = "Saved ✓";
+        } else if (r.status === 409) {
+          status.className = "ms-3 text-danger";
+          status.textContent = "Time is up or exam already submitted. This answer was not saved.";
+        } else {
+          throw new Error("save failed");
+        }
+      }).catch(function () {
+        if (retry) {
+          status.className = "ms-3 text-warning";
+          status.textContent = "Not saved, retrying...";
+          return new Promise(function (res) { setTimeout(res, 3000); })
+            .then(function () { return send(questionId, choiceId, false); });
+        }
+        status.className = "ms-3 text-danger";
+        status.textContent = "Could not save. Check your connection. Submit will still send your answers.";
+      });
+    }
+
+    document.querySelectorAll("#examform input[type=radio]").forEach(function (input) {
+      input.addEventListener("change", function () {
+        var questionId = input.name.replace("q_", "");
+        status.className = "ms-3 text-muted";
+        status.textContent = "Saving...";
+        queue = queue.then(function () { return send(questionId, input.value, true); });
+      });
+    });
   })();
 </script>
 {% endblock %}

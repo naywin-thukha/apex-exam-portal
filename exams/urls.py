@@ -18,6 +18,7 @@ urlpatterns = [
     path("teacher/exams/<int:pk>/unpublish/", views.ExamStatusView.as_view(action="unpublish"), name="exam_unpublish"),
     path("teacher/exams/<int:pk>/results/", views.ExamResultsView.as_view(), name="exam_results"),
     path("exams/<int:pk>/result/", views.ResultView.as_view(), name="exam_result"),
+    path("exams/<int:pk>/answer/", views.AutosaveView.as_view(), name="exam_autosave"),
         # Student
     path("exams/<int:pk>/start/", views.StartExamView.as_view(), name="exam_start"),
     path("exams/<int:pk>/take/", views.ExamTakeView.as_view(), name="exam_take"),

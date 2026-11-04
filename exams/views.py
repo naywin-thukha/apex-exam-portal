@@ -8,11 +8,11 @@ from django.views.generic import (
     CreateView, DeleteView, DetailView, ListView, UpdateView,
 )
 
-from .models import Answer, Assignment, Attempt, Exam, Question
+from .models import Answer, Assignment, Attempt, Choice, Exam, Question
 from .forms import AssignStudentsForm, ExamForm, QuestionForm, make_choice_formset
 from .mixins import StudentRequiredMixin, TeacherRequiredMixin
 from .models import Exam, Question
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from datetime import timedelta
 from django.utils import timezone
 
@@ -426,3 +426,36 @@ class ExamResultsView(TeacherRequiredMixin, View):
         return render(request, "exams/exam_results.html", {
             "exam": exam, "rows": rows, "stats": stats,
         })
+
+
+class AutosaveView(StudentRequiredMixin, View):
+    """Job: store ONE answer as soon as the student clicks an option."""
+
+    def post(self, request, pk):
+        exam = student_exam_or_404(request, pk)
+        attempt = get_object_or_404(Attempt, student=request.user, exam=exam)
+
+        if attempt.status == Attempt.Status.SUBMITTED:
+            return JsonResponse({"ok": False, "error": "submitted"}, status=409)
+        left = int((attempt_deadline(attempt) - timezone.now()).total_seconds())
+        if left < -GRACE_SECONDS:
+            return JsonResponse({"ok": False, "error": "time_up"}, status=409)
+
+        try:
+            question_id = int(request.POST.get("question"))
+            choice_id = int(request.POST.get("choice"))
+        except (TypeError, ValueError):
+            return JsonResponse({"ok": False, "error": "bad_request"}, status=400)
+
+        # the option must belong to that question, and the question to this exam
+        choice = Choice.objects.filter(
+            pk=choice_id, question_id=question_id, question__exam=exam
+        ).first()
+        if choice is None:
+            return JsonResponse({"ok": False, "error": "bad_request"}, status=400)
+
+        Answer.objects.update_or_create(
+            attempt=attempt, question_id=question_id,
+            defaults={"selected_choice": choice},
+        )
+        return JsonResponse({"ok": True})
