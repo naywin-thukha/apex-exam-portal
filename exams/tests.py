@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 from .views import finalize_attempt
 
+from django.template.loader import render_to_string
+
 PW = "pw-12345-x"
 
 
@@ -522,3 +524,26 @@ class StudentIsolationTests(TestCase):
         )
         self.assertEqual(Attempt.objects.get(student=self.b, exam=self.exam).score, 0)
         self.assertEqual(Attempt.objects.get(student=self.a, exam=self.exam).score, 1)
+
+class ErrorPageTests(TestCase):
+    def setUp(self):
+        self.student = User.objects.create_user("s1", password=PW, role=User.Role.STUDENT)
+
+    def test_404_uses_the_custom_page(self):
+        self.client.login(username="s1", password=PW)
+        resp = self.client.get("/this/does/not/exist/")
+        self.assertEqual(resp.status_code, 404)
+        self.assertContains(resp, "Page not found", status_code=404)
+
+    def test_404_for_anonymous_visitor_also_works(self):
+        resp = self.client.get("/this/does/not/exist/")
+        self.assertContains(resp, "Page not found", status_code=404)
+
+    def test_500_page_is_standalone_and_renders(self):
+        html = render_to_string("500.html")
+        self.assertIn("Something went wrong", html)
+        self.assertNotIn("{%", html)  # no unrendered template tags
+
+    def test_403_page_renders(self):
+        html = render_to_string("403.html")
+        self.assertIn("Not allowed", html)
