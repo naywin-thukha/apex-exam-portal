@@ -547,3 +547,30 @@ class ErrorPageTests(TestCase):
     def test_403_page_renders(self):
         html = render_to_string("403.html")
         self.assertIn("Not allowed", html)
+
+from django.test import Client
+
+
+class LoginCsrfTests(TestCase):
+    def setUp(self):
+        User.objects.create_user("s1", password=PW, role=User.Role.STUDENT)
+        self.url = reverse("accounts:login")
+
+    def test_login_without_csrf_token_is_rejected(self):
+        client = Client(enforce_csrf_checks=True)
+        resp = client.post(self.url, {"username": "s1", "password": PW})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_login_page_contains_a_csrf_token(self):
+        resp = Client(enforce_csrf_checks=True).get(self.url)
+        self.assertContains(resp, "csrfmiddlewaretoken")
+
+    def test_login_works_with_the_token_from_the_page(self):
+        client = Client(enforce_csrf_checks=True)
+        page = client.get(self.url)
+        token = page.cookies["csrftoken"].value
+        resp = client.post(
+            self.url,
+            {"username": "s1", "password": PW, "csrfmiddlewaretoken": token},
+        )
+        self.assertEqual(resp.status_code, 302)
