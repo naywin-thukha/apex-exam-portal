@@ -23,10 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-SECRET_KEY = os.getenv('SECRET_KEY')
-DEBUG = os.getenv('DEBUG') == 'True'
-
-ALLOWED_HOSTS = []
+SECRET_KEY = os.environ["SECRET_KEY"]  # stops with an error if it is missing
+DEBUG = os.getenv("DEBUG", "False") == "True"  # safe default: OFF
+ALLOWED_HOSTS = [
+    h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()
+]
 
 
 # Application definition
@@ -146,13 +147,23 @@ LOGOUT_REDIRECT_URL = "accounts:login"
 import os
 import dj_database_url
 
-SECRET_KEY = os.environ.get('SECRET_KEY', SECRET_KEY)
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 CSRF_TRUSTED_ORIGINS = [
-    o for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o
+    o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Cloudflare tells Django the original request used HTTPS
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Exam-day switch: HTTPS=True in .env while students use the tunnel.
+# Cookies are then only sent over HTTPS. Leave it False for local http://127.0.0.1 work.
+HTTPS = os.getenv("HTTPS", "False") == "True"
+SESSION_COOKIE_SECURE = HTTPS
+CSRF_COOKIE_SECURE = HTTPS
+
+# Deliberately accepted deploy warnings:
+#  mail.E001 - this portal sends no email (no sign-up, no password reset)
+#  W004 HSTS - strict HSTS can lock a browser to a hostname for a long time; not worth it for 1-2 exams
+#  W008 SSL redirect - students only get the HTTPS tunnel address, so no plain-HTTP entry exists
+SILENCED_SYSTEM_CHECKS = ["mail.E001", "security.W004", "security.W008"]
 
 # Use the hosted database when DATABASE_URL is set, otherwise keep local MySQL settings.
 if os.environ.get('DATABASE_URL'):

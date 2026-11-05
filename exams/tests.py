@@ -393,3 +393,132 @@ class GradingTests(TestCase):
         attempt.refresh_from_db()
         self.assertEqual(attempt.status, Attempt.Status.SUBMITTED)
         self.assertEqual(attempt.score, 1)
+
+class OwnershipTests(TestCase):
+    """A teacher cannot touch another teacher's exam. A student cannot use teacher pages."""
+
+    def setUp(self):
+        self.subject = Subject.objects.create(name="Maths")
+        self.owner = User.objects.create_user("owner", password=PW, role=User.Role.TEACHER)
+        self.other = User.objects.create_user("other", password=PW, role=User.Role.TEACHER)
+        self.student = User.objects.create_user("s1", password=PW, role=User.Role.STUDENT)
+        self.subject.teachers.add(self.owner, self.other)
+
+        self.exam = Exam.objects.create(
+            title="Private", subject=self.subject, creator=self.owner, duration_minutes=30
+        )
+        self.question = Question.objects.create(exam=self.exam, text="Q1", marks=1, order=1)
+        Choice.objects.create(question=self.question, text="a", is_correct=True)
+        Choice.objects.create(question=self.question, text="b", is_correct=False)
+
+        pk, qpk = self.exam.pk, self.question.pk
+        self.get_urls = [
+            reverse("exams:exam_detail", args=[pk]),
+            reverse("exams:exam_update", args=[pk]),
+            reverse("exams:exam_delete", args=[pk]),
+            reverse("exams:exam_students", args=[pk]),
+            reverse("exams:exam_results", args=[pk]),
+            reverse("exams:question_create", args=[pk]),
+            reverse("exams:question_edit", args=[pk, qpk]),
+        ]
+        self.post_urls = [
+            reverse("exams:exam_update", args=[pk]),
+            reverse("exams:exam_delete", args=[pk]),
+            reverse("exams:exam_publish", args=[pk]),
+            reverse("exams:exam_unpublish", args=[pk]),
+            reverse("exams:exam_students", args=[pk]),
+            reverse("exams:question_create", args=[pk]),
+            reverse("exams:question_edit", args=[pk, qpk]),
+            reverse("exams:question_delete", args=[pk, qpk]),
+        ]
+
+    def test_other_teacher_gets_404_on_every_page(self):
+        self.client.login(username="other", password=PW)
+        for url in self.get_urls:
+            self.assertEqual(self.client.get(url).status_code, 404, f"GET {url}")
+
+    def test_other_teacher_cannot_change_anything(self):
+        self.client.login(username="other", password=PW)
+        for url in self.post_urls:
+            self.assertEqual(self.client.post(url, {"title": "hacked"}).status_code, 404, f"POST {url}")
+        # nothing changed
+        self.exam.refresh_from_db()
+        self.assertEqual(self.exam.title, "Private")
+        self.assertEqual(self.exam.status, Exam.Status.DRAFT)
+        self.assertTrue(Question.objects.filter(pk=self.question.pk).exists())
+        self.assertEqual(self.exam.assignments.count(), 0)
+
+    def test_student_is_blocked_from_every_teacher_page(self):
+        self.client.login(username="s1", password=PW)
+        for url in self.get_urls:
+            self.assertEqual(self.client.get(url).status_code, 403, f"GET {url}")
+        for url in self.post_urls:
+            self.assertEqual(self.client.post(url, {}).status_code, 403, f"POST {url}")
+        self.assertTrue(Exam.objects.filter(pk=self.exam.pk).exists())
+
+    def test_anonymous_is_redirected_from_every_teacher_page(self):
+        for url in self.get_urls:
+            self.assertEqual(self.client.get(url).status_code, 302, f"GET {url}")
+
+    def test_teacher_cannot_use_student_pages(self):
+        self.client.login(username="owner", password=PW)
+        for name in ("exam_start", "exam_take", "exam_autosave", "exam_result"):
+            url = reverse(f"exams:{name}", args=[self.exam.pk])
+            self.assertEqual(self.client.get(url).status_code, 403, name)
+
+
+class StudentIsolationTests(TestCase):
+    """A student cannot see or change another student's attempt."""
+
+    def setUp(self):
+        self.subject = Subject.objects.create(name="Maths")
+        self.teacher = User.objects.create_user("t1", password=PW, role=User.Role.TEACHER)
+        self.a = User.objects.create_user("alice", password=PW, role=User.Role.STUDENT)
+        self.b = User.objects.create_user("bob", password=PW, role=User.Role.STUDENT)
+        now = timezone.now()
+        self.exam = Exam.objects.create(
+            title="Shared", subject=self.subject, creator=self.teacher,
+            duration_minutes=30, status=Exam.Status.PUBLISHED,
+            start_time=now - timedelta(hours=1), end_time=now + timedelta(hours=1),
+        )
+        Assignment.objects.create(exam=self.exam, student=self.a)
+        Assignment.objects.create(exam=self.exam, student=self.b)
+        self.q = Question.objects.create(exam=self.exam, text="Q1", marks=1, order=1)
+        self.right = Choice.objects.create(question=self.q, text="a", is_correct=True)
+        self.wrong = Choice.objects.create(question=self.q, text="b", is_correct=False)
+
+        # Alice takes and submits the exam
+        self.client.login(username="alice", password=PW)
+        self.client.post(reverse("exams:exam_start", args=[self.exam.pk]))
+        self.client.post(
+            reverse("exams:exam_take", args=[self.exam.pk]),
+            {"action": "submit", f"q_{self.q.id}": self.right.id},
+        )
+        self.client.logout()
+
+    def test_bob_does_not_get_alices_result(self):
+        self.client.login(username="bob", password=PW)
+        resp = self.client.get(reverse("exams:exam_result", args=[self.exam.pk]))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_bob_cannot_change_alices_answers(self):
+        self.client.login(username="bob", password=PW)
+        # bob has not started, so there is no attempt to write to
+        resp = self.client.post(
+            reverse("exams:exam_autosave", args=[self.exam.pk]),
+            {"question": self.q.id, "choice": self.wrong.id},
+        )
+        self.assertEqual(resp.status_code, 404)
+        alice_attempt = Attempt.objects.get(student=self.a, exam=self.exam)
+        self.assertEqual(Answer.objects.get(attempt=alice_attempt).selected_choice_id, self.right.id)
+        self.assertEqual(alice_attempt.score, 1)
+
+    def test_bobs_own_attempt_is_separate(self):
+        self.client.login(username="bob", password=PW)
+        self.client.post(reverse("exams:exam_start", args=[self.exam.pk]))
+        self.client.post(
+            reverse("exams:exam_take", args=[self.exam.pk]),
+            {"action": "submit", f"q_{self.q.id}": self.wrong.id},
+        )
+        self.assertEqual(Attempt.objects.get(student=self.b, exam=self.exam).score, 0)
+        self.assertEqual(Attempt.objects.get(student=self.a, exam=self.exam).score, 1)
