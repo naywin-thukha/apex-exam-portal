@@ -1,3 +1,6 @@
+# Temporary node modules backup
+node_modules_temp/
+
 # Logs
 logs
 *.log

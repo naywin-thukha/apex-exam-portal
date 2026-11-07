@@ -9,15 +9,20 @@ import {
   User, 
   GraduationCap, 
   X,
-  Check
+  Check,
+  Lock,
+  Eye,
+  EyeOff,
+  AtSign
 } from 'lucide-react';
 
 interface UserData {
   id: string;
   name: string;
-  email: string;
+  username: string;
   role: string;
   status: 'Active' | 'Inactive';
+  password?: string;
 }
 
 export const UserManagement: React.FC = () => {
@@ -29,10 +34,14 @@ export const UserManagement: React.FC = () => {
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  // New User Form State
+  // Password Visibility Toggle State
+  const [showPassword, setShowPassword] = useState(false);
+
+  // New User Form State (With Username & Password)
   const [newUser, setNewUser] = useState({
     name: '',
-    email: '',
+    username: '',
+    password: '',
     role: 'Teacher',
     status: 'Active' as 'Active' | 'Inactive',
   });
@@ -40,10 +49,10 @@ export const UserManagement: React.FC = () => {
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   const [users, setUsers] = useState<UserData[]>([
-    { id: '001', name: 'Teacher One', email: 'teacher1@apex.edu.mm', role: 'Teacher', status: 'Active' },
-    { id: '002', name: 'Student One', email: 'student1@apex.edu.mm', role: 'Student', status: 'Active' },
-    { id: '003', name: 'Teacher Two', email: 'teacher2@apex.edu.mm', role: 'Teacher', status: 'Active' },
-    { id: '004', name: 'Student Two', email: 'student2@apex.edu.mm', role: 'Student', status: 'Inactive' },
+    { id: '001', name: 'Teacher One', username: 'teacher1', role: 'Teacher', status: 'Active' },
+    { id: '002', name: 'Student One', username: 'student1', role: 'Student', status: 'Active' },
+    { id: '003', name: 'Teacher Two', username: 'teacher2', role: 'Teacher', status: 'Active' },
+    { id: '004', name: 'Student Two', username: 'student2', role: 'Student', status: 'Inactive' },
   ]);
 
   // Close dropdown when clicking outside
@@ -91,20 +100,21 @@ export const UserManagement: React.FC = () => {
     const createdUser: UserData = {
       id: newId,
       name: newUser.name,
-      email: newUser.email,
+      username: newUser.username,
+      password: newUser.password,
       role: newUser.role,
       status: newUser.status,
     };
 
     setUsers([createdUser, ...users]);
-    setNewUser({ name: '', email: '', role: 'Teacher', status: 'Active' });
+    setNewUser({ name: '', username: '', password: '', role: 'Teacher', status: 'Active' });
     setIsAddModalOpen(false);
   };
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch = 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.id.includes(searchTerm);
     const matchesRole = selectedRole === 'All' || user.role === selectedRole;
     return matchesSearch && matchesRole;
@@ -133,7 +143,7 @@ export const UserManagement: React.FC = () => {
           <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search by name or username..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-gray-50/50 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all"
@@ -159,7 +169,7 @@ export const UserManagement: React.FC = () => {
               <tr className="border-b border-gray-100 text-gray-400 text-xs font-semibold uppercase tracking-wider">
                 <th className="py-4 px-6">ID</th>
                 <th className="py-4 px-6">Name</th>
-                <th className="py-4 px-6">Email</th>
+                <th className="py-4 px-6">Username</th>
                 <th className="py-4 px-6">Roles</th>
                 <th className="py-4 px-6">Status</th>
                 <th className="py-4 px-6 text-right">Actions</th>
@@ -170,7 +180,7 @@ export const UserManagement: React.FC = () => {
                 <tr key={user.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="py-4 px-6 text-gray-500 font-medium">{user.id}</td>
                   <td className="py-4 px-6 font-bold text-gray-900">{user.name}</td>
-                  <td className="py-4 px-6 text-gray-600">{user.email}</td>
+                  <td className="py-4 px-6 text-gray-600 font-mono text-xs">@{user.username}</td>
                   <td className="py-4 px-6">
                     <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
                       user.role === 'Teacher' 
@@ -242,7 +252,7 @@ export const UserManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Add User Modal */}
+      {/* Add User Modal (With Username Input) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
@@ -270,15 +280,40 @@ export const UserManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="e.g. john@apex.edu.mm"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
-                  required
-                />
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Username</label>
+                <div className="relative">
+                  <AtSign className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="e.g. johndoe"
+                    value={newUser.username}
+                    onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Password (Assigned by Admin)</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter secure password"
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -353,11 +388,11 @@ export const UserManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Email Address</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Username</label>
                 <input
-                  type="email"
-                  value={editingUser.email}
-                  onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                  type="text"
+                  value={editingUser.username}
+                  onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                   required
                 />
