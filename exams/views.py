@@ -394,9 +394,12 @@ class ExamTakeView(StudentRequiredMixin, View):
 
         ensure_orders(self.attempt)
         questions = ordered_questions(self.exam, self.attempt)
-        saved = {a.question_id: a.selected_choice_id for a in self.attempt.answers.all()}
+        answers = list(self.attempt.answers.all())
+        saved = {a.question_id: a.selected_choice_id for a in answers}
+        flagged = {a.question_id for a in answers if a.marked_for_review}
         for q in questions:
             q.saved_choice_id = saved.get(q.id)
+            q.saved_flag = q.id in flagged
 
         return render(request, self.template_name, {
             "exam": self.exam, "attempt": self.attempt,

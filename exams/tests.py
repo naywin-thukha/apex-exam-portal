@@ -354,6 +354,17 @@ class StudentExamFlowTests(TestCase):
         attempt = Attempt.objects.get(student=self.s1, exam=self.exam)
         self.assertEqual(attempt.score, 2)  # only Q2 answered (2 marks)
 
+    def test_flag_is_restored_when_the_page_is_reloaded(self):
+        self.login("s1")
+        self.client.post(self.start)
+        (q1, r1, w1), (q2, r2, w2) = self.questions
+        self.client.post(self.flag_url(), {"question": q2.id, "marked": "1"})
+        resp = self.client.get(self.take)
+        flags = {q.id: q.saved_flag for q in resp.context["questions"]}
+        self.assertEqual(flags, {q1.id: False, q2.id: True})
+        self.assertContains(resp, 'data-flagged="1"')
+        self.assertContains(resp, 'data-flagged="0"')
+
 class GradingTests(TestCase):
     def setUp(self):
         self.subject = Subject.objects.create(name="Maths")
