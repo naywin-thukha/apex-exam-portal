@@ -518,3 +518,34 @@ class AutosaveView(StudentRequiredMixin, View):
             defaults={"selected_choice": choice},
         )
         return JsonResponse({"ok": True})
+
+class FlagView(StudentRequiredMixin, View):
+    """Job: store 'marked for review' for ONE question as soon as the student toggles it."""
+
+    def post(self, request, pk):
+        exam = student_exam_or_404(request, pk)
+        attempt = get_object_or_404(Attempt, student=request.user, exam=exam)
+
+        if attempt.status == Attempt.Status.SUBMITTED:
+            return JsonResponse({"ok": False, "error": "submitted"}, status=409)
+        left = int((attempt_deadline(attempt) - timezone.now()).total_seconds())
+        if left < -GRACE_SECONDS:
+            return JsonResponse({"ok": False, "error": "time_up"}, status=409)
+
+        try:
+            question_id = int(request.POST.get("question"))
+        except (TypeError, ValueError):
+            return JsonResponse({"ok": False, "error": "bad_request"}, status=400)
+        marked = request.POST.get("marked")
+        if marked not in ("0", "1"):
+            return JsonResponse({"ok": False, "error": "bad_request"}, status=400)
+        # the question must belong to this exam
+        if not exam.questions.filter(pk=question_id).exists():
+            return JsonResponse({"ok": False, "error": "bad_request"}, status=400)
+
+        # defaults only contains the flag, so a saved choice is never touched
+        Answer.objects.update_or_create(
+            attempt=attempt, question_id=question_id,
+            defaults={"marked_for_review": marked == "1"},
+        )
+        return JsonResponse({"ok": True, "marked": marked == "1"})

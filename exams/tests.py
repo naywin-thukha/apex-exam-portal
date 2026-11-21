@@ -275,6 +275,85 @@ class StudentExamFlowTests(TestCase):
         resp = self.client.post(self.autosave_url(), {"question": q.id, "choice": right.id})
         self.assertEqual(resp.status_code, 404)
 
+    def flag_url(self):
+        return reverse("exams:exam_flag", args=[self.exam.pk])
+
+    def test_flag_is_saved_without_an_answer(self):
+        self.login("s1")
+        self.client.post(self.start)
+        q, right, wrong = self.questions[0]
+        resp = self.client.post(self.flag_url(), {"question": q.id, "marked": "1"})
+        self.assertEqual(resp.status_code, 200)
+        answer = Answer.objects.get(question=q)
+        self.assertTrue(answer.marked_for_review)
+        self.assertIsNone(answer.selected_choice)
+
+    def test_flag_and_answer_do_not_overwrite_each_other(self):
+        self.login("s1")
+        self.client.post(self.start)
+        q, right, wrong = self.questions[0]
+        self.client.post(self.flag_url(), {"question": q.id, "marked": "1"})
+        self.client.post(self.autosave_url(), {"question": q.id, "choice": right.id})
+        answer = Answer.objects.get(question=q)
+        self.assertTrue(answer.marked_for_review)
+        self.assertEqual(answer.selected_choice_id, right.id)
+        # un-flagging keeps the chosen option
+        self.client.post(self.flag_url(), {"question": q.id, "marked": "0"})
+        answer.refresh_from_db()
+        self.assertFalse(answer.marked_for_review)
+        self.assertEqual(answer.selected_choice_id, right.id)
+
+    def test_flag_rejects_bad_input(self):
+        self.login("s1")
+        self.client.post(self.start)
+        q, right, wrong = self.questions[0]
+        self.assertEqual(self.client.post(self.flag_url(), {"question": q.id, "marked": "yes"}).status_code, 400)
+        self.assertEqual(self.client.post(self.flag_url(), {"question": "abc", "marked": "1"}).status_code, 400)
+        self.assertEqual(self.client.post(self.flag_url(), {"question": 999999, "marked": "1"}).status_code, 400)
+        self.assertFalse(Answer.objects.exists())
+
+    def test_flag_rejected_after_submit(self):
+        self.login("s1")
+        self.client.post(self.start)
+        q, right, wrong = self.questions[0]
+        self.client.post(self.take, {"action": "submit"})
+        resp = self.client.post(self.flag_url(), {"question": q.id, "marked": "1"})
+        self.assertEqual(resp.status_code, 409)
+        self.assertFalse(Answer.objects.filter(marked_for_review=True).exists())
+
+    def test_flag_rejected_after_deadline(self):
+        self.login("s1")
+        self.client.post(self.start)
+        attempt = Attempt.objects.get(student=self.s1, exam=self.exam)
+        q, right, wrong = self.questions[0]
+        late = attempt.started_at + timedelta(minutes=30, seconds=60)
+        with patch("django.utils.timezone.now", return_value=late):
+            resp = self.client.post(self.flag_url(), {"question": q.id, "marked": "1"})
+        self.assertEqual(resp.status_code, 409)
+        self.assertFalse(Answer.objects.exists())
+
+    def test_flag_needs_an_assigned_student_with_a_started_attempt(self):
+        q, right, wrong = self.questions[0]
+        self.login("s2")  # not assigned to the exam
+        self.assertEqual(self.client.post(self.flag_url(), {"question": q.id, "marked": "1"}).status_code, 404)
+        self.client.logout()
+        self.login("s1")  # assigned, but has not started
+        self.assertEqual(self.client.post(self.flag_url(), {"question": q.id, "marked": "1"}).status_code, 404)
+
+    def test_teacher_cannot_use_the_flag_endpoint(self):
+        self.login("t1")
+        q, right, wrong = self.questions[0]
+        self.assertEqual(self.client.post(self.flag_url(), {"question": q.id, "marked": "1"}).status_code, 403)
+
+    def test_a_flag_alone_does_not_change_the_score(self):
+        self.login("s1")
+        self.client.post(self.start)
+        (q1, r1, w1), (q2, r2, w2) = self.questions
+        self.client.post(self.flag_url(), {"question": q1.id, "marked": "1"})
+        self.client.post(self.take, {"action": "submit", f"q_{q2.id}": r2.id})
+        attempt = Attempt.objects.get(student=self.s1, exam=self.exam)
+        self.assertEqual(attempt.score, 2)  # only Q2 answered (2 marks)
+
 class GradingTests(TestCase):
     def setUp(self):
         self.subject = Subject.objects.create(name="Maths")

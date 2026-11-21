@@ -22,5 +22,6 @@ urlpatterns = [
         # Student
     path("exams/<int:pk>/start/", views.StartExamView.as_view(), name="exam_start"),
     path("exams/<int:pk>/take/", views.ExamTakeView.as_view(), name="exam_take"),
+    path("exams/<int:pk>/flag/", views.FlagView.as_view(), name="exam_flag"),
     
 ]
