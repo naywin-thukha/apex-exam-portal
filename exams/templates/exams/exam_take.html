@@ -65,14 +65,38 @@
         </div>
       {% endfor %}
 
-      <button class="btn btn-success" name="action" value="submit"
-              onclick="return confirm('Submit the exam? You cannot change answers afterwards.')">Submit exam</button>
+            <button type="button" class="btn btn-success" id="submitbtn">Submit exam</button>
       <span id="savestatus" class="ms-3 text-muted"></span>
     </div>
 
   </div>
 </form>
-
+<div class="modal fade" id="submitModal" tabindex="-1" aria-labelledby="submitModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="submitModalTitle">Submit the exam?</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="summaryText" class="mb-2"></p>
+        <div id="unansweredBox" class="mb-2 d-none">
+          <div class="small fw-semibold">Not answered (click a number to go there)</div>
+          <div class="d-flex flex-wrap gap-1" id="unansweredList"></div>
+        </div>
+        <div id="flaggedBox" class="mb-2 d-none">
+          <div class="small fw-semibold">Flagged for review</div>
+          <div class="d-flex flex-wrap gap-1" id="flaggedList"></div>
+        </div>
+        <p class="small text-muted mb-0">You cannot change your answers after submitting.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Keep working</button>
+        <button type="button" class="btn btn-success" id="confirmSubmit">Submit exam</button>
+      </div>
+    </div>
+  </div>
+</div>
 <script>
   // The browser countdown is only a display. The server enforces the real deadline.
   (function () {
@@ -261,6 +285,61 @@
       r.addEventListener("change", refresh);
     });
 
+        // ---- submit confirmation ----
+    var submitBtn = document.getElementById("submitbtn");
+    var modalEl = document.getElementById("submitModal");
+    var form = document.getElementById("examform");
+
+    function submitNow() {
+      document.getElementById("confirmSubmit").disabled = true;   // no double clicks
+      var h = document.createElement("input");
+      h.type = "hidden"; h.name = "action"; h.value = "submit";
+      form.appendChild(h);
+      form.submit();
+    }
+
+    function numberButtons(listEl, indexes, kind) {
+      listEl.innerHTML = "";
+      indexes.forEach(function (i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn btn-sm " + kind;
+        b.textContent = i + 1;
+        b.addEventListener("click", function () {
+          bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+          go(i);
+        });
+        listEl.appendChild(b);
+      });
+    }
+
+    submitBtn.addEventListener("click", function () {
+      var unanswered = [], flaggedList = [];
+      panels.forEach(function (p, i) {
+        if (!answered(i)) { unanswered.push(i); }
+        if (flagged(i)) { flaggedList.push(i); }
+      });
+      if (typeof bootstrap === "undefined") {   // Bootstrap's script did not load: plain confirm box
+        var text = "Submit the exam? " + unanswered.length + " not answered, " +
+          flaggedList.length + " flagged. You cannot change answers afterwards.";
+        if (window.confirm(text)) { submitNow(); }
+        return;
+      }
+      document.getElementById("summaryText").textContent =
+        "You answered " + (panels.length - unanswered.length) + " of " + panels.length + " questions.";
+      document.getElementById("unansweredBox").classList.toggle("d-none", unanswered.length === 0);
+      document.getElementById("flaggedBox").classList.toggle("d-none", flaggedList.length === 0);
+      numberButtons(document.getElementById("unansweredList"), unanswered, "btn-outline-secondary");
+      numberButtons(document.getElementById("flaggedList"), flaggedList, "btn-warning");
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    });
+    document.getElementById("confirmSubmit").addEventListener("click", submitNow);
+
+    // Enter inside the form must never submit the exam by accident
+    form.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); }
+    });
+    
     // reopen on the question named in the address (#q3), so a reload keeps your place
     var m = /^#q(\d+)$/.exec(window.location.hash);
     go(m ? parseInt(m[1], 10) - 1 : 0);

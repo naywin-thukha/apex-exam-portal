@@ -365,6 +365,14 @@ class StudentExamFlowTests(TestCase):
         self.assertContains(resp, 'data-flagged="1"')
         self.assertContains(resp, 'data-flagged="0"')
 
+    def test_exam_page_has_the_submit_confirmation(self):
+        self.login("s1")
+        self.client.post(self.start)
+        resp = self.client.get(self.take)
+        self.assertContains(resp, 'id="submitModal"')
+        self.assertContains(resp, 'id="submitbtn"')
+        self.assertContains(resp, 'id="confirmSubmit"')
+
 class GradingTests(TestCase):
     def setUp(self):
         self.subject = Subject.objects.create(name="Maths")
@@ -823,3 +831,4 @@ class ShuffleTests(TestCase):
         self.assertEqual(shown["C. x = 3"], "x = 3")
         self.assertEqual(shown["plain"], "plain")
         self.assertEqual(sorted(c.letter for c in page_q.ordered_choices), list("ABCD"))
+    
