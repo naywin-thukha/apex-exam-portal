@@ -17,6 +17,10 @@ from .views import finalize_attempt
 
 from django.template.loader import render_to_string
 
+import json
+
+from .views import ordered_questions
+
 PW = "pw-12345-x"
 
 
@@ -574,3 +578,158 @@ class LoginCsrfTests(TestCase):
             {"username": "s1", "password": PW, "csrfmiddlewaretoken": token},
         )
         self.assertEqual(resp.status_code, 302)
+
+class ShuffleTests(TestCase):
+    QUESTIONS = 8  # enough that two students almost never get the same order by chance
+
+    def setUp(self):
+        self.subject = Subject.objects.create(name="Maths")
+        self.teacher = User.objects.create_user("t1", password=PW, role=User.Role.TEACHER)
+        now = timezone.now()
+        self.exam = Exam.objects.create(
+            title="Shuffle", subject=self.subject, creator=self.teacher,
+            duration_minutes=30, status=Exam.Status.PUBLISHED,
+            start_time=now - timedelta(hours=1), end_time=now + timedelta(hours=2),
+            shuffle_questions=True, shuffle_options=True,
+        )
+        self.students = []
+        for i in range(6):
+            s = User.objects.create_user(f"s{i}", password=PW, role=User.Role.STUDENT)
+            Assignment.objects.create(exam=self.exam, student=s)
+            self.students.append(s)
+
+        self.questions = []
+        for n in range(1, self.QUESTIONS + 1):
+            q = Question.objects.create(exam=self.exam, text=f"Q{n}", marks=1, order=n)
+            for k in range(4):  # the first option is the correct one
+                Choice.objects.create(question=q, text=f"opt {k}", is_correct=(k == 0))
+            self.questions.append(q)
+
+        self.start_url = reverse("exams:exam_start", args=[self.exam.pk])
+        self.take_url = reverse("exams:exam_take", args=[self.exam.pk])
+
+    def start(self, index=0):
+        """Log in as student `index`, click Start, return the attempt."""
+        student = self.students[index]
+        self.client.login(username=student.username, password=PW)
+        self.client.post(self.start_url)
+        return Attempt.objects.get(student=student, exam=self.exam)
+
+    def shown(self):
+        """The question ids the student page shows, in order (and the response)."""
+        resp = self.client.get(self.take_url)
+        self.assertEqual(resp.status_code, 200)
+        return [q.id for q in resp.context["questions"]], resp
+
+    def test_orders_are_saved_when_the_attempt_starts(self):
+        attempt = self.start()
+        self.assertEqual(
+            sorted(attempt.question_order), sorted(q.id for q in self.questions)
+        )
+        for q in self.questions:
+            self.assertEqual(
+                sorted(attempt.option_order[str(q.id)]),
+                sorted(c.id for c in q.choices.all()),
+            )
+
+    def test_shuffling_off_keeps_the_normal_order(self):
+        Exam.objects.filter(pk=self.exam.pk).update(shuffle_questions=False, shuffle_options=False)
+        attempt = self.start()
+        self.assertEqual(attempt.question_order, [q.id for q in self.questions])
+        for q in self.questions:
+            self.assertEqual(
+                attempt.option_order[str(q.id)], sorted(c.id for c in q.choices.all())
+            )
+
+    def test_different_students_get_different_orders(self):
+        attempts = [self.start(i) for i in range(6)]
+        question_orders = {tuple(a.question_order) for a in attempts}
+        option_orders = {json.dumps(a.option_order, sort_keys=True) for a in attempts}
+        self.assertGreater(len(question_orders), 1)
+        self.assertGreater(len(option_orders), 1)
+
+    def test_order_is_stable_after_reloads(self):
+        attempt = self.start()
+        first, _ = self.shown()
+        for _ in range(3):
+            again, _ = self.shown()
+            self.assertEqual(again, first)
+        attempt.refresh_from_db()
+        self.assertEqual(first, attempt.question_order)
+
+    def test_clicking_start_twice_does_not_reshuffle(self):
+        attempt = self.start()
+        before = list(attempt.question_order)
+        self.client.post(self.start_url)
+        attempt.refresh_from_db()
+        self.assertEqual(attempt.question_order, before)
+        self.assertEqual(Attempt.objects.filter(exam=self.exam).count(), 1)
+
+    def test_page_is_drawn_from_the_saved_order(self):
+        attempt = self.start()
+        wanted = list(reversed(attempt.question_order))
+        Attempt.objects.filter(pk=attempt.pk).update(question_order=wanted)
+        ids, _ = self.shown()
+        self.assertEqual(ids, wanted)
+
+    def test_options_are_drawn_from_the_saved_order(self):
+        attempt = self.start()
+        q = self.questions[0]
+        wanted = list(reversed(attempt.option_order[str(q.id)]))
+        new_options = dict(attempt.option_order)
+        new_options[str(q.id)] = wanted
+        Attempt.objects.filter(pk=attempt.pk).update(option_order=new_options)
+        _, resp = self.shown()
+        page_q = next(x for x in resp.context["questions"] if x.id == q.id)
+        self.assertEqual([c.id for c in page_q.ordered_choices], wanted)
+        self.assertEqual([c.letter for c in page_q.ordered_choices], list("ABCD"))
+
+    def test_grading_is_unchanged_by_the_order(self):
+        attempt = self.start()
+        data = {"action": "submit"}
+        for q in self.questions:
+            data[f"q_{q.id}"] = q.choices.get(is_correct=True).id
+        self.client.post(self.take_url, data)
+        attempt.refresh_from_db()
+        self.assertEqual(attempt.score, self.QUESTIONS)
+        self.assertEqual(attempt.total_marks, self.QUESTIONS)
+
+    def test_a_wrong_answer_is_still_wrong_in_any_order(self):
+        attempt = self.start()
+        data = {"action": "submit"}
+        for q in self.questions:
+            data[f"q_{q.id}"] = q.choices.get(is_correct=False, text="opt 1").id
+        self.client.post(self.take_url, data)
+        attempt.refresh_from_db()
+        self.assertEqual(attempt.score, 0)
+
+    def test_old_attempt_without_an_order_gets_one_and_keeps_it(self):
+        student = self.students[0]
+        self.client.login(username=student.username, password=PW)
+        attempt = Attempt.objects.create(student=student, exam=self.exam)  # no order saved
+        first, _ = self.shown()
+        attempt.refresh_from_db()
+        self.assertIsNotNone(attempt.question_order)
+        second, _ = self.shown()
+        self.assertEqual(first, second)
+
+    def test_a_question_missing_from_the_saved_order_is_not_lost(self):
+        attempt = self.start()
+        keep = attempt.question_order[0]
+        Attempt.objects.filter(pk=attempt.pk).update(question_order=[keep])
+        ids, _ = self.shown()
+        self.assertEqual(ids[0], keep)
+        self.assertEqual(sorted(ids), sorted(q.id for q in self.questions))
+
+    def test_typed_letters_are_replaced_by_the_pages_own(self):
+        attempt = self.start()
+        q = Question.objects.create(exam=self.exam, text="Lettered", marks=1, order=99)
+        for text in ("A. (5, 10, 7)", "B) two", "C. x = 3", "plain"):
+            Choice.objects.create(question=q, text=text, is_correct=(text == "plain"))
+        page_q = next(x for x in ordered_questions(self.exam, attempt) if x.id == q.id)
+        shown = {c.text: c.display_text for c in page_q.ordered_choices}
+        self.assertEqual(shown["A. (5, 10, 7)"], "(5, 10, 7)")
+        self.assertEqual(shown["B) two"], "two")
+        self.assertEqual(shown["C. x = 3"], "x = 3")
+        self.assertEqual(shown["plain"], "plain")
+        self.assertEqual(sorted(c.letter for c in page_q.ordered_choices), list("ABCD"))
