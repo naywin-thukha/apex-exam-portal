@@ -12,25 +12,61 @@
 
 <form method="post" id="examform">
   {% csrf_token %}
-  {% for q in questions %}
-    <div class="card mb-3"><div class="card-body">
-      <strong>Q{{ forloop.counter }}. {{ q.text }}</strong>
-      <span class="text-muted">({{ q.marks }} mark{{ q.marks|pluralize }})</span>
-      <div class="mt-2">
-                {% for c in q.ordered_choices %}
-          <div class="form-check">
-            <input class="form-check-input" type="radio"
-                   name="q_{{ q.id }}" id="c{{ c.id }}" value="{{ c.id }}"
-                   {% if q.saved_choice_id == c.id %}checked{% endif %}>
-            <label class="form-check-label" for="c{{ c.id }}">{{ c.letter }}. {{ c.display_text }}</label>
-          </div>
-        {% endfor %}
+  <div class="row g-3">
+
+    <!-- Navigator: on phones it comes first, on large screens it sits on the right -->
+    <div class="col-lg-3 order-1 order-lg-2">
+      <div class="card"><div class="card-body">
+        <div class="small text-muted mb-2">Jump to a question</div>
+        <div class="d-flex flex-wrap gap-1" id="navgrid">
+          {% for q in questions %}
+            <button type="button" class="btn btn-sm btn-outline-secondary nav-btn"
+                    data-index="{{ forloop.counter0 }}" style="min-width:2.4rem">{{ forloop.counter }}</button>
+          {% endfor %}
+        </div>
+        <div class="small text-muted mt-3">
+          <span class="badge text-bg-primary">current</span>
+          <span class="badge text-bg-success">answered</span>
+          <span class="badge text-bg-secondary">not answered</span>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- Questions: only one is visible at a time, all stay in the form -->
+    <div class="col-lg-9 order-2 order-lg-1">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="fw-semibold" id="qlabel"></div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="prevbtn">&larr; Previous</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="nextbtn">Next &rarr;</button>
+        </div>
       </div>
-    </div></div>
-  {% endfor %}
-    <button class="btn btn-success" name="action" value="submit"
-          onclick="return confirm('Submit the exam? You cannot change answers afterwards.')">Submit exam</button>
-  <span id="savestatus" class="ms-3 text-muted"></span>
+
+      {% for q in questions %}
+        <div class="question-panel d-none" data-index="{{ forloop.counter0 }}" data-qid="{{ q.id }}">
+          <div class="card mb-3"><div class="card-body">
+            <strong>Q{{ forloop.counter }}. {{ q.text }}</strong>
+            <span class="text-muted">({{ q.marks }} mark{{ q.marks|pluralize }})</span>
+            <div class="mt-2">
+              {% for c in q.ordered_choices %}
+                <div class="form-check">
+                  <input class="form-check-input" type="radio"
+                         name="q_{{ q.id }}" id="c{{ c.id }}" value="{{ c.id }}"
+                         {% if q.saved_choice_id == c.id %}checked{% endif %}>
+                  <label class="form-check-label" for="c{{ c.id }}">{{ c.letter }}. {{ c.display_text }}</label>
+                </div>
+              {% endfor %}
+            </div>
+          </div></div>
+        </div>
+      {% endfor %}
+
+      <button class="btn btn-success" name="action" value="submit"
+              onclick="return confirm('Submit the exam? You cannot change answers afterwards.')">Submit exam</button>
+      <span id="savestatus" class="ms-3 text-muted"></span>
+    </div>
+
+  </div>
 </form>
 
 <script>
@@ -105,6 +141,47 @@
     });
   })();
 </script>
-{% endblock %}
 
-        
+<script>
+  // Navigator: show one question at a time. Hidden questions stay in the form.
+  (function () {
+    var panels = Array.prototype.slice.call(document.querySelectorAll(".question-panel"));
+    var navBtns = Array.prototype.slice.call(document.querySelectorAll(".nav-btn"));
+    if (!panels.length) { return; }
+    var prev = document.getElementById("prevbtn");
+    var next = document.getElementById("nextbtn");
+    var label = document.getElementById("qlabel");
+    var current = 0;
+
+    function answered(i) {
+      return panels[i].querySelector("input[type=radio]:checked") !== null;
+    }
+    function refresh() {
+      panels.forEach(function (p, i) { p.classList.toggle("d-none", i !== current); });
+      navBtns.forEach(function (b, i) {
+        var state = (i === current) ? "btn-primary" : (answered(i) ? "btn-success" : "btn-outline-secondary");
+        b.className = "btn btn-sm nav-btn " + state;
+      });
+      label.textContent = "Question " + (current + 1) + " of " + panels.length;
+      prev.disabled = (current === 0);
+      next.disabled = (current === panels.length - 1);
+    }
+    function go(i) {
+      current = Math.max(0, Math.min(panels.length - 1, i));
+      refresh();
+      try { history.replaceState(null, "", "#q" + (current + 1)); } catch (e) {}
+    }
+
+    navBtns.forEach(function (b, i) { b.addEventListener("click", function () { go(i); }); });
+    prev.addEventListener("click", function () { go(current - 1); });
+    next.addEventListener("click", function () { go(current + 1); });
+    document.querySelectorAll("#examform input[type=radio]").forEach(function (r) {
+      r.addEventListener("change", refresh);
+    });
+
+    // reopen on the question named in the address (#q3), so a reload keeps your place
+    var m = /^#q(\d+)$/.exec(window.location.hash);
+    go(m ? parseInt(m[1], 10) - 1 : 0);
+  })();
+</script>
+{% endblock %}
