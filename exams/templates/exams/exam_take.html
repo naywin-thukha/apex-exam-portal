@@ -1,10 +1,22 @@
 {% extends "base.html" %}
 {% block title %}{{ exam.title }}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h4 mb-0">{{ exam.title }}</h1>
-  <div class="fs-5">Time left: <strong id="timer" data-remaining="{{ remaining }}">--:--</strong></div>
+<div class="sticky-top bg-body border-bottom py-2 mb-3 d-flex justify-content-between align-items-center" style="z-index:1020">
+  <h1 class="h5 mb-0 text-truncate me-2">{{ exam.title }}</h1>
+  <div class="fs-5 text-nowrap">Time left: <strong id="timer" data-remaining="{{ remaining }}">--:--</strong></div>
 </div>
+
+<style>
+  .option { position: relative; padding: 0; border: 1px solid var(--bs-border-color);
+            border-radius: .5rem; margin-bottom: .5rem; }
+  .option .form-check-input { position: absolute; float: none; left: .85rem; top: 50%;
+                              margin: -.5rem 0 0 0; }
+  .option .form-check-label { display: block; width: 100%; cursor: pointer;
+                              padding: .75rem .85rem .75rem 2.6rem; }
+  .option:has(input:checked) { background: var(--bs-success-bg-subtle);
+                               border-color: var(--bs-success-border-subtle); }
+  .nav-btn { min-width: 2.7rem; min-height: 2.5rem; }
+</style>
 
 {% if exam.instructions %}<p class="text-muted">{{ exam.instructions }}</p>{% endif %}
 
@@ -12,28 +24,98 @@
 
 <form method="post" id="examform">
   {% csrf_token %}
-  {% for q in questions %}
-    <div class="card mb-3"><div class="card-body">
-      <strong>Q{{ forloop.counter }}. {{ q.text }}</strong>
-      <span class="text-muted">({{ q.marks }} mark{{ q.marks|pluralize }})</span>
-      <div class="mt-2">
-                {% for c in q.ordered_choices %}
-          <div class="form-check">
-            <input class="form-check-input" type="radio"
-                   name="q_{{ q.id }}" id="c{{ c.id }}" value="{{ c.id }}"
-                   {% if q.saved_choice_id == c.id %}checked{% endif %}>
-            <label class="form-check-label" for="c{{ c.id }}">{{ c.letter }}. {{ c.display_text }}</label>
-          </div>
-        {% endfor %}
-      </div>
-    </div></div>
-  {% endfor %}
-    <button class="btn btn-success" name="action" value="submit"
-          onclick="return confirm('Submit the exam? You cannot change answers afterwards.')">Submit exam</button>
-  <span id="savestatus" class="ms-3 text-muted"></span>
-</form>
+  <div class="row g-3">
 
+    <!-- Navigator: collapsed behind a button on phones, always open on large screens -->
+    <div class="col-lg-3 order-1 order-lg-2">
+      <button class="btn btn-outline-primary w-100 d-lg-none mb-2" type="button" id="navtoggle"
+              data-bs-toggle="collapse" data-bs-target="#navcollapse"
+              aria-expanded="false" aria-controls="navcollapse">Questions</button>
+      <div class="collapse d-lg-block" id="navcollapse">
+        <div class="card"><div class="card-body">
+          <div class="small text-muted mb-2">Jump to a question</div>
+          <div class="d-flex flex-wrap gap-1" id="navgrid">
+            {% for q in questions %}
+              <button type="button" class="btn btn-sm btn-outline-secondary nav-btn"
+                      data-index="{{ forloop.counter0 }}">{{ forloop.counter }}</button>
+            {% endfor %}
+          </div>
+          <div class="small mt-3">
+            <span class="badge text-bg-primary">current</span>
+            <span class="badge text-bg-success">answered</span>
+            <span class="badge text-bg-warning">flagged</span>
+            <span class="badge text-bg-secondary">not answered</span>
+          </div>
+          <div class="small mt-3" id="counts"></div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Questions: only one is visible at a time, all stay in the form -->
+    <div class="col-lg-9 order-2 order-lg-1">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="fw-semibold" id="qlabel"></div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary " id="prevbtn">&larr; Previous</button>
+          <button type="button" class="btn btn-outline-secondary " id="nextbtn">Next &rarr;</button>
+        </div>
+      </div>
+
+      {% for q in questions %}
+        <div class="question-panel d-none" data-index="{{ forloop.counter0 }}" data-qid="{{ q.id }}"
+             data-flagged="{% if q.saved_flag %}1{% else %}0{% endif %}">
+          <div class="card mb-3"><div class="card-body">
+            <strong>Q{{ forloop.counter }}. {{ q.text }}</strong>
+            <span class="text-muted">({{ q.marks }} mark{{ q.marks|pluralize }})</span>
+            <div class="mt-2">
+              {% for c in q.ordered_choices %}
+                <div class="form-check option">
+                  <input class="form-check-input" type="radio"
+                         name="q_{{ q.id }}" id="c{{ c.id }}" value="{{ c.id }}"
+                         {% if q.saved_choice_id == c.id %}checked{% endif %}>
+                  <label class="form-check-label" for="c{{ c.id }}">{{ c.letter }}. {{ c.display_text }}</label>
+                </div>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-warning flag-btn mt-3">&#9873; Flag for review</button>
+          </div></div>
+        </div>
+      {% endfor %}
+
+            <button type="button" class="btn btn-success" id="submitbtn">Submit exam</button>
+      <span id="savestatus" class="ms-3 text-muted"></span>
+    </div>
+
+  </div>
+</form>
+<div class="modal fade" id="submitModal" tabindex="-1" aria-labelledby="submitModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="submitModalTitle">Submit the exam?</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="summaryText" class="mb-2"></p>
+        <div id="unansweredBox" class="mb-2 d-none">
+          <div class="small fw-semibold">Not answered (click a number to go there)</div>
+          <div class="d-flex flex-wrap gap-1" id="unansweredList"></div>
+        </div>
+        <div id="flaggedBox" class="mb-2 d-none">
+          <div class="small fw-semibold">Flagged for review</div>
+          <div class="d-flex flex-wrap gap-1" id="flaggedList"></div>
+        </div>
+        <p class="small text-muted mb-0">You cannot change your answers after submitting.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Keep working</button>
+        <button type="button" class="btn btn-success" id="confirmSubmit">Submit exam</button>
+      </div>
+    </div>
+  </div>
+</div>
 <script>
+   
   // The browser countdown is only a display. The server enforces the real deadline.
   (function () {
     var el = document.getElementById("timer");
@@ -105,6 +187,191 @@
     });
   })();
 </script>
-{% endblock %}
 
-        
+<script>
+  // Navigator and flags: show one question at a time. Hidden questions stay in the form.
+  (function () {
+    var panels = Array.prototype.slice.call(document.querySelectorAll(".question-panel"));
+    var navBtns = Array.prototype.slice.call(document.querySelectorAll(".nav-btn"));
+    if (!panels.length) { return; }
+    var prev = document.getElementById("prevbtn");
+    var next = document.getElementById("nextbtn");
+    var label = document.getElementById("qlabel");
+    var counts = document.getElementById("counts");
+    var statusEl = document.getElementById("savestatus");
+    var flagUrl = "{% url 'exams:exam_flag' exam.pk %}";
+    var token = document.querySelector("[name=csrfmiddlewaretoken]").value;
+    var flagQueue = Promise.resolve();   // flag changes are sent one after another
+    var current = 0;
+
+    function answered(i) {
+      return panels[i].querySelector("input[type=radio]:checked") !== null;
+    }
+    function flagged(i) {
+      return panels[i].dataset.flagged === "1";
+    }
+    function setFlagged(i, value) {
+      panels[i].dataset.flagged = value ? "1" : "0";
+    }
+
+    function refresh() {
+      var nAnswered = 0, nFlagged = 0;
+      panels.forEach(function (p, i) {
+        p.classList.toggle("d-none", i !== current);
+        var btn = p.querySelector(".flag-btn");
+        if (flagged(i)) {
+          btn.className = "btn btn-sm btn-warning flag-btn mt-3";
+          btn.innerHTML = "&#9873; Flagged for review (click to remove)";
+        } else {
+          btn.className = "btn btn-sm btn-outline-warning flag-btn mt-3";
+          btn.innerHTML = "&#9873; Flag for review";
+        }
+        if (answered(i)) { nAnswered += 1; }
+        if (flagged(i)) { nFlagged += 1; }
+      });
+      navBtns.forEach(function (b, i) {
+        var state;
+        if (i === current) { state = "btn-primary"; }
+        else if (flagged(i)) { state = "btn-warning"; }
+        else if (answered(i)) { state = "btn-success"; }
+        else { state = "btn-outline-secondary"; }
+        b.className = "btn btn-sm nav-btn " + state;
+        b.textContent = (i + 1) + (flagged(i) ? " \u2691" : "");
+      });
+      label.textContent = "Question " + (current + 1) + " of " + panels.length;
+      counts.textContent = "Answered " + nAnswered + " \u00b7 Not answered " +
+        (panels.length - nAnswered) + " \u00b7 Flagged " + nFlagged;
+        document.getElementById("navtoggle").textContent = "Questions \u00b7 " + nAnswered + "/" +
+        panels.length + " answered" + (nFlagged ? " \u00b7 " + nFlagged + " flagged" : "");
+      prev.disabled = (current === 0);
+      next.disabled = (current === panels.length - 1);
+    }
+
+    function go(i) {
+      current = Math.max(0, Math.min(panels.length - 1, i));
+      refresh();
+      try { history.replaceState(null, "", "#q" + (current + 1)); } catch (e) {}
+    }
+
+    // send one flag change to the server; resolves true if it was saved
+    function sendFlag(questionId, value, retry) {
+      var body = new URLSearchParams({ question: questionId, marked: value ? "1" : "0" });
+      return fetch(flagUrl, { method: "POST", headers: { "X-CSRFToken": token }, body: body })
+        .then(function (r) {
+          if (r.ok) {
+            statusEl.className = "ms-3 text-success";
+            statusEl.textContent = "Saved ✓";
+            return true;
+          }
+          if (r.status === 409) {
+            statusEl.className = "ms-3 text-danger";
+            statusEl.textContent = "Time is up or exam already submitted. This flag was not saved.";
+            return false;
+          }
+          throw new Error("flag failed");
+        })
+        .catch(function () {
+          if (retry) {
+            statusEl.className = "ms-3 text-warning";
+            statusEl.textContent = "Flag not saved, retrying...";
+            return new Promise(function (res) { setTimeout(res, 3000); })
+              .then(function () { return sendFlag(questionId, value, false); });
+          }
+          statusEl.className = "ms-3 text-danger";
+          statusEl.textContent = "Could not save the flag. Check your connection.";
+          return false;
+        });
+    }
+
+    panels.forEach(function (p, i) {
+      p.querySelector(".flag-btn").addEventListener("click", function () {
+        var want = !flagged(i);
+        setFlagged(i, want);            // show it straight away
+        refresh();
+        statusEl.className = "ms-3 text-muted";
+        statusEl.textContent = "Saving...";
+        flagQueue = flagQueue.then(function () {
+          return sendFlag(p.dataset.qid, want, true).then(function (ok) {
+            if (!ok) { setFlagged(i, !want); refresh(); }   // put it back if it was not saved
+          });
+        });
+      });
+    });
+
+    navBtns.forEach(function (b, i) {
+      b.addEventListener("click", function () {
+        go(i);
+        // on a phone, tuck the grid away again once you have picked a question
+        var navc = document.getElementById("navcollapse");
+        if (navc.classList.contains("show") && typeof bootstrap !== "undefined") {
+          bootstrap.Collapse.getOrCreateInstance(navc).hide();
+        }
+      });
+    });
+    prev.addEventListener("click", function () { go(current - 1); });
+    next.addEventListener("click", function () { go(current + 1); });
+    document.querySelectorAll("#examform input[type=radio]").forEach(function (r) {
+      r.addEventListener("change", refresh);
+    });
+
+        // ---- submit confirmation ----
+    var submitBtn = document.getElementById("submitbtn");
+    var modalEl = document.getElementById("submitModal");
+    var form = document.getElementById("examform");
+
+    function submitNow() {
+      document.getElementById("confirmSubmit").disabled = true;   // no double clicks
+      var h = document.createElement("input");
+      h.type = "hidden"; h.name = "action"; h.value = "submit";
+      form.appendChild(h);
+      form.submit();
+    }
+
+    function numberButtons(listEl, indexes, kind) {
+      listEl.innerHTML = "";
+      indexes.forEach(function (i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn btn-sm " + kind;
+        b.textContent = i + 1;
+        b.addEventListener("click", function () {
+          bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+          go(i);
+        });
+        listEl.appendChild(b);
+      });
+    }
+
+    submitBtn.addEventListener("click", function () {
+      var unanswered = [], flaggedList = [];
+      panels.forEach(function (p, i) {
+        if (!answered(i)) { unanswered.push(i); }
+        if (flagged(i)) { flaggedList.push(i); }
+      });
+      if (typeof bootstrap === "undefined") {   // Bootstrap's script did not load: plain confirm box
+        var text = "Submit the exam? " + unanswered.length + " not answered, " +
+          flaggedList.length + " flagged. You cannot change answers afterwards.";
+        if (window.confirm(text)) { submitNow(); }
+        return;
+      }
+      document.getElementById("summaryText").textContent =
+        "You answered " + (panels.length - unanswered.length) + " of " + panels.length + " questions.";
+      document.getElementById("unansweredBox").classList.toggle("d-none", unanswered.length === 0);
+      document.getElementById("flaggedBox").classList.toggle("d-none", flaggedList.length === 0);
+      numberButtons(document.getElementById("unansweredList"), unanswered, "btn-outline-secondary");
+      numberButtons(document.getElementById("flaggedList"), flaggedList, "btn-warning");
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    });
+    document.getElementById("confirmSubmit").addEventListener("click", submitNow);
+
+    // Enter inside the form must never submit the exam by accident
+    form.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); }
+    });
+
+    // reopen on the question named in the address (#q3), so a reload keeps your place
+    var m = /^#q(\d+)$/.exec(window.location.hash);
+    go(m ? parseInt(m[1], 10) - 1 : 0);
+  })();
+</script>
+{% endblock %}

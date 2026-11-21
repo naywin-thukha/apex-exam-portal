@@ -151,6 +151,7 @@ class Answer(models.Model):
     selected_choice = models.ForeignKey(
         Choice, on_delete=models.PROTECT, null=True, blank=True, related_name="+"
     )
+    marked_for_review = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
