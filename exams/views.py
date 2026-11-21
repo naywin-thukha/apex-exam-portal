@@ -16,6 +16,9 @@ from django.http import HttpResponse, JsonResponse
 from datetime import timedelta
 from django.utils import timezone
 
+import random
+import re
+
 GRACE_SECONDS = 5  # allowance for slow connections when saving near the deadline
 
 def welcome(request):
@@ -254,6 +257,21 @@ def student_exam_or_404(request, pk):
         Exam, pk=pk, status=Exam.Status.PUBLISHED, assignments__student=request.user
     )
 
+def build_orders(exam):
+    """Job: decide one student's question order and option order.
+    Returns (list of question ids, {question id: list of option ids}).
+    With shuffling off, the normal order is kept."""
+    question_ids = []
+    option_order = {}
+    for q in exam.questions.prefetch_related("choices"):  # normal order: order, then id
+        question_ids.append(q.id)
+        option_ids = sorted(c.id for c in q.choices.all())
+        if exam.shuffle_options:
+            random.shuffle(option_ids)
+        option_order[str(q.id)] = option_ids  # JSON keys are text
+    if exam.shuffle_questions:
+        random.shuffle(question_ids)
+    return question_ids, option_order
 
 class StartExamView(StudentRequiredMixin, View):
     """Job: POST-only. Create the student's attempt if the rules allow it."""
@@ -276,8 +294,14 @@ class StartExamView(StudentRequiredMixin, View):
             messages.error(request, "This exam is closed.")
             return redirect("accounts:student_dashboard")
 
-        # get_or_create protects against a double click making two attempts
-        Attempt.objects.get_or_create(student=request.user, exam=exam)
+        # get_or_create protects against a double click making two attempts.
+        # The orders are only used when the attempt is created, so a second click
+        # can never reshuffle.
+        question_ids, option_order = build_orders(exam)
+        Attempt.objects.get_or_create(
+            student=request.user, exam=exam,
+            defaults={"question_order": question_ids, "option_order": option_order},
+        )
         return redirect("exams:exam_take", pk=exam.pk)
 
 def finalize_attempt(attempt):
@@ -300,6 +324,40 @@ def finalize_attempt(attempt):
         attempt.submitted_at = timezone.now()
         attempt.save()
     return attempt
+
+def ensure_orders(attempt):
+    """Job: give old attempts (started before shuffling existed) an order, once."""
+    if attempt.question_order is None or attempt.option_order is None:
+        question_ids, option_order = build_orders(attempt.exam)
+        # only fills it if still empty, so two page loads at once cannot disagree
+        Attempt.objects.filter(pk=attempt.pk, question_order__isnull=True).update(
+            question_order=question_ids, option_order=option_order
+        )
+        attempt.refresh_from_db(fields=["question_order", "option_order"])
+
+
+LETTER_PREFIX = re.compile(r"^\s*[A-Ha-h][.)]\s+")
+
+
+def ordered_questions(exam, attempt):
+    """Job: the exam's questions in THIS student's saved order, each with its
+    options in this student's saved order (q.ordered_choices)."""
+    questions = {q.id: q for q in exam.questions.prefetch_related("choices")}
+    ids = [qid for qid in attempt.question_order if qid in questions]
+    ids += [qid for qid in questions if qid not in ids]  # never lose a question
+    result = []
+    for qid in ids:
+        q = questions[qid]
+        choices = {c.id: c for c in q.choices.all()}
+        order = [cid for cid in attempt.option_order.get(str(qid), []) if cid in choices]
+        order += [cid for cid in choices if cid not in order]  # never lose an option
+        q.ordered_choices = [choices[cid] for cid in order]
+        for position, choice in enumerate(q.ordered_choices):
+            choice.letter = "ABCDEFGH"[position]
+            # teachers often type "A. " in front of the text; the page adds the letter itself
+            choice.display_text = LETTER_PREFIX.sub("", choice.text)
+        result.append(q)
+    return result
 
 class ExamTakeView(StudentRequiredMixin, View):
     """Job: show the questions, save answers, and submit."""
@@ -334,7 +392,8 @@ class ExamTakeView(StudentRequiredMixin, View):
             messages.info(request, "Time was up, so your exam was submitted automatically.")
             return redirect("accounts:student_dashboard")
 
-        questions = list(self.exam.questions.prefetch_related("choices"))
+        ensure_orders(self.attempt)
+        questions = ordered_questions(self.exam, self.attempt)
         saved = {a.question_id: a.selected_choice_id for a in self.attempt.answers.all()}
         for q in questions:
             q.saved_choice_id = saved.get(q.id)

@@ -42,6 +42,14 @@ class Exam(models.Model):
     show_answers = models.BooleanField(
         default=False, help_text="Let students see correct answers after submitting."
     )
+
+    shuffle_questions = models.BooleanField(
+        default=False, help_text="Each student sees the questions in a different order."
+    )
+
+    shuffle_options = models.BooleanField(
+        default=False, help_text="Each student sees the answer options in a different order."
+    )
     students = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through="Assignment",
@@ -124,6 +132,9 @@ class Attempt(models.Model):
     score = models.PositiveIntegerField(null=True, blank=True)
     total_marks = models.PositiveIntegerField(null=True, blank=True)
     percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    # This student's own order, fixed when the attempt starts and never reshuffled.
+    question_order = models.JSONField(null=True, blank=True)  # [question ids]
+    option_order = models.JSONField(null=True, blank=True)  # {"<question id>": [choice ids]}
 
     class Meta:
         constraints = [

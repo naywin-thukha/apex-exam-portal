@@ -17,12 +17,12 @@
       <strong>Q{{ forloop.counter }}. {{ q.text }}</strong>
       <span class="text-muted">({{ q.marks }} mark{{ q.marks|pluralize }})</span>
       <div class="mt-2">
-        {% for c in q.choices.all %}
+                {% for c in q.ordered_choices %}
           <div class="form-check">
             <input class="form-check-input" type="radio"
                    name="q_{{ q.id }}" id="c{{ c.id }}" value="{{ c.id }}"
                    {% if q.saved_choice_id == c.id %}checked{% endif %}>
-            <label class="form-check-label" for="c{{ c.id }}">{{ c.text }}</label>
+            <label class="form-check-label" for="c{{ c.id }}">{{ c.letter }}. {{ c.display_text }}</label>
           </div>
         {% endfor %}
       </div>
@@ -106,3 +106,5 @@
   })();
 </script>
 {% endblock %}
+
+        

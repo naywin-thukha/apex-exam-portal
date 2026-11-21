@@ -28,6 +28,7 @@ class ExamForm(BootstrapMixin, forms.ModelForm):
         fields = [
             "title", "subject", "instructions", "duration_minutes",
             "start_time", "end_time", "show_answers",
+            "shuffle_questions", "shuffle_options",
         ]
         widgets = {
             "instructions": forms.Textarea(attrs={"rows": 3}),
